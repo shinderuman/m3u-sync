@@ -21,6 +21,7 @@ type Config struct {
 	USBRoot      string
 	DryRun       bool
 	SyncTool     string
+	NoCleanup    bool
 }
 
 func main() {
@@ -29,13 +30,14 @@ func main() {
 	flag.StringVar(&cfg.USBRoot, "usbRoot", "", "USB root directory (required)")
 	flag.BoolVar(&cfg.DryRun, "dryrun", false, "dry run mode (no actual sync)")
 	flag.StringVar(&cfg.SyncTool, "sync", "rsync", "sync tool to use (rsync or rclone)")
+	flag.BoolVar(&cfg.NoCleanup, "no-cleanup", false, "disable cleanup of old playlists")
 	flag.Parse()
 
 	if err := validateArgs(cfg); err != nil {
 		log.Fatal(err)
 	}
 
-	unique, perPlaylistLines, err := collectUniqueFiles(cfg)
+	unique, perPlaylistLines, playlists, err := collectUniqueFiles(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -46,15 +48,18 @@ func main() {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	if err := syncFiles(cfg, tmpDir); err != nil {
+	writeAllPlaylists(cfg, perPlaylistLines)
+
+	cleanup := shouldCleanup(cfg, len(playlists))
+	if cleanup {
+		if err := cleanupOldPlaylists(cfg, perPlaylistLines); err != nil {
+			log.Printf("cleanup error: %v", err)
+		}
+	}
+
+	if err := syncFiles(cfg, tmpDir, cleanup); err != nil {
 		log.Printf("sync error: %v", err)
 	}
-
-	if err := cleanupOldPlaylists(cfg, perPlaylistLines); err != nil {
-		log.Printf("cleanup error: %v", err)
-	}
-
-	writeAllPlaylists(cfg, perPlaylistLines)
 }
 
 func validateArgs(cfg Config) error {
@@ -70,10 +75,10 @@ func validateArgs(cfg Config) error {
 	return nil
 }
 
-func collectUniqueFiles(cfg Config) (map[string]struct{}, map[string][]string, error) {
+func collectUniqueFiles(cfg Config) (map[string]struct{}, map[string][]string, []string, error) {
 	playlists, err := filepath.Glob(cfg.PlaylistGlob)
 	if err != nil || len(playlists) == 0 {
-		return nil, nil, fmt.Errorf("no playlists matched: %s", cfg.PlaylistGlob)
+		return nil, nil, nil, fmt.Errorf("no playlists matched: %s", cfg.PlaylistGlob)
 	}
 
 	unique := map[string]struct{}{}
@@ -89,7 +94,7 @@ func collectUniqueFiles(cfg Config) (map[string]struct{}, map[string][]string, e
 			unique[filepath.Clean(track)] = struct{}{}
 		}
 	}
-	return unique, perPlaylistLines, nil
+	return unique, perPlaylistLines, playlists, nil
 }
 
 func parsePlaylistFile(path string) ([]string, []string, error) {
@@ -172,7 +177,7 @@ func createSymlinks(unique map[string]struct{}) (string, error) {
 	return tmpDir, nil
 }
 
-func syncFiles(cfg Config, srcDir string) error {
+func syncFiles(cfg Config, srcDir string, shouldDelete bool) error {
 	musicDir := getMusicDir(cfg)
 	if err := os.MkdirAll(musicDir, 0755); err != nil {
 		return err
@@ -180,44 +185,60 @@ func syncFiles(cfg Config, srcDir string) error {
 
 	switch cfg.SyncTool {
 	case "rsync":
-		return syncWithRsync(cfg, srcDir, musicDir)
+		return syncWithRsync(cfg, srcDir, musicDir, shouldDelete)
 	case "rclone":
-		return syncWithRclone(cfg, srcDir, musicDir)
+		return syncWithRclone(cfg, srcDir, musicDir, shouldDelete)
 	default:
 		return fmt.Errorf("unsupported sync tool: %s", cfg.SyncTool)
 	}
 }
 
-func syncWithRsync(cfg Config, srcDir, musicDir string) error {
-	args := buildRsyncArgs(cfg.DryRun, srcDir, musicDir)
+func syncWithRsync(cfg Config, srcDir, musicDir string, shouldDelete bool) error {
+	args := buildRsyncArgs(shouldDelete, cfg.DryRun, srcDir, musicDir)
 	cmd := exec.Command("rsync", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-func buildRsyncArgs(dryRun bool, srcDir, destDir string) []string {
-	args := []string{"-avL", "--progress", "--delete"}
+func buildRsyncArgs(shouldDelete, dryRun bool, srcDir, destDir string) []string {
+	args := []string{"-avL", "--progress"}
+	if shouldDelete {
+		args = append(args, "--delete")
+	}
 	if dryRun {
 		args = append(args, "--dry-run")
 	}
 	return append(args, srcDir+"/", destDir+"/")
 }
 
-func syncWithRclone(cfg Config, srcDir, musicDir string) error {
-	args := buildRcloneArgs(cfg.DryRun, srcDir, musicDir)
+func syncWithRclone(cfg Config, srcDir, musicDir string, shouldDelete bool) error {
+	args := buildRcloneArgs(shouldDelete, cfg.DryRun, srcDir, musicDir)
 	cmd := exec.Command("rclone", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-func buildRcloneArgs(dryRun bool, srcDir, destDir string) []string {
-	args := []string{"sync", "--copy-links", "--progress", "--delete-during"}
+func buildRcloneArgs(shouldDelete, dryRun bool, srcDir, destDir string) []string {
+	args := []string{"sync", "--copy-links", "--progress"}
+	if shouldDelete {
+		args = append(args, "--delete-during")
+	}
 	if dryRun {
 		args = append(args, "--dry-run")
 	}
 	return append(args, srcDir, destDir)
+}
+
+func shouldCleanup(cfg Config, playlistCount int) bool {
+	if cfg.NoCleanup {
+		return false // 明示的に無効
+	}
+	if playlistCount == 1 {
+		return false // 単一ファイルは自動で無効
+	}
+	return true // 複数ファイルはクリーンアップ
 }
 
 func cleanupOldPlaylists(cfg Config, perPlaylistLines map[string][]string) error {
