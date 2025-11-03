@@ -16,11 +16,12 @@ M3U8プレイリストとその音楽ファイルをUSBメモリに効率的に�
 ## 必要な環境
 
 - **Go 1.16以上**
-- **rsync**: ファイル同期に使用
-- **macOS/Linux**: rsyncとシンボリンクをサポートするOS
+- **同期ツール**: rsync または rclone
+- **macOS/Linux**: シンボリンクをサポートするOS
 
-### rsyncのインストール
+### 同期ツールのインストール
 
+#### rsync（デフォルト）
 ```bash
 # macOS (Homebrew)
 brew install rsync
@@ -30,6 +31,18 @@ sudo apt-get install rsync
 
 # CentOS/RHEL
 sudo yum install rsync
+```
+
+#### rclone（オプション）
+```bash
+# macOS (Homebrew)
+brew install rclone
+
+# Ubuntu/Debian
+sudo apt-get install rclone
+
+# その他のOS
+curl https://rclone.org/install.sh | sudo bash
 ```
 
 ## インストール
@@ -51,29 +64,39 @@ go build -o music-sync .
 # ドライラン（実際の変更は行わない）
 ./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/UNTITLED" -dryrun
 
-# 実際の同期実行
+# 実際の同期実行（rsync使用）
 ./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/UNTITLED"
+
+# rcloneを使用した同期
+./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/UNTITLED" -sync rclone
 ```
 
 ### コマンドラインオプション
 
-| オプション | 必須 | 説明 | 例 |
-|-----------|------|------|-----|
-| `-playlist` | ✓ | プレイリストファイルのGlobパターン | `"~/Playlists/*.m3u8"` |
-| `-usbRoot` | ✓ | USBメモリのルートディレクトリ | `"/Volumes/UNTITLED"` |
-| `-dryrun` | - | ドライランモード（変更を実行しない） | - |
+| オプション | 必須 | デフォルト | 説明 | 例 |
+|-----------|------|-----------|------|-----|
+| `-playlist` | ✓ | - | プレイリストファイルのGlobパターン | `"~/Playlists/*.m3u8"` |
+| `-usbRoot` | ✓ | - | USBメモリのルートディレクトリ | `"/Volumes/UNTITLED"` |
+| `-sync` | - | `rsync` | 同期ツール（rsync または rclone） | `rclone` |
+| `-dryrun` | - | `false` | ドライランモード（変更を実行しない） | - |
 
 ### 使用例
 
 ```bash
-# 特定のプレイリストのみ同期
+# 特定のプレイリストのみ同期（rsync）
 ./music-sync -playlist "~/Music/Playlists/favorites.m3u8" -usbRoot "/Volumes/MyUSB"
 
-# 複数のプレイリストを一括同期
+# 複数のプレイリストを一括同期（rsync）
 ./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB"
+
+# rcloneを使用した同期
+./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB" -sync rclone
 
 # ドライランで事前確認
 ./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB" -dryrun
+
+# rclone + ドライラン
+./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB" -sync rclone -dryrun
 ```
 
 ## 動作の詳細
@@ -90,13 +113,21 @@ go build -o music-sync .
 
 ### 3. 一時ディレクトリ作成
 - システムの一時ディレクトリにシンボリンクツリーを作成
-- 元のディレクトリ構造を保持しながらrsync用の構造を構築
+- 元のディレクトリ構造を保持しながら同期用の構造を構築
 
-### 4. rsync同期
+### 4. ファイル同期
+#### rsync使用時
 - `-avL`オプション: アーカイブモード、詳細出力、シンボリンクの実体をコピー
 - `--progress`: 進行状況表示
 - `--delete`: 不要ファイルの削除
-- USB内の`Music`ディレクトリに同期
+
+#### rclone使用時
+- `sync`コマンド: 一方向同期
+- `--copy-links`: シンボリンクの実体をコピー
+- `--progress`: 進行状況表示
+- `--delete-during`: 不要ファイルの削除
+
+両方ともUSB内の`Music`ディレクトリに同期
 
 ### 5. プレイリスト変換
 - 絶対パスを相対パス（`./`から始まる）に変換
