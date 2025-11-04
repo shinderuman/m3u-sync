@@ -48,16 +48,8 @@ func main() {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	writeAllPlaylists(cfg, perPlaylistLines)
-
-	cleanup := shouldCleanup(cfg, len(playlists))
-	if cleanup {
-		if err := cleanupOldPlaylists(cfg, perPlaylistLines); err != nil {
-			log.Printf("cleanup error: %v", err)
-		}
-	}
-
-	if err := syncFiles(cfg, tmpDir, cleanup); err != nil {
+	writeAllPlaylists(cfg, tmpDir, perPlaylistLines)
+	if err := syncFiles(cfg, tmpDir, shouldCleanup(cfg, len(playlists))); err != nil {
 		log.Printf("sync error: %v", err)
 	}
 }
@@ -221,9 +213,11 @@ func syncWithRclone(cfg Config, srcDir, musicDir string, shouldDelete bool) erro
 }
 
 func buildRcloneArgs(shouldDelete, dryRun bool, srcDir, destDir string) []string {
-	args := []string{"sync", "--copy-links", "--progress"}
+	var args []string
 	if shouldDelete {
-		args = append(args, "--delete-during")
+		args = []string{"sync", "--copy-links", "--progress", "--size-only"}
+	} else {
+		args = []string{"copy", "--copy-links", "--progress", "--size-only"}
 	}
 	if dryRun {
 		args = append(args, "--dry-run")
@@ -285,24 +279,23 @@ func getMusicDir(cfg Config) string {
 	return filepath.Join(cfg.USBRoot, usbMusicDir)
 }
 
-func writeAllPlaylists(cfg Config, perPlaylistLines map[string][]string) {
+func writeAllPlaylists(cfg Config, outputDir string, perPlaylistLines map[string][]string) {
 	for playlist, lines := range perPlaylistLines {
-		if err := writeConvertedPlaylist(cfg, playlist, lines); err != nil {
+		if err := writeConvertedPlaylist(cfg, outputDir, playlist, lines); err != nil {
 			log.Printf("playlist write error %s: %v", playlist, err)
 		}
 	}
 }
 
-func writeConvertedPlaylist(cfg Config, srcPlaylist string, originalLines []string) error {
-	musicDir := getMusicDir(cfg)
-	outPath := filepath.Join(musicDir, filepath.Base(srcPlaylist))
+func writeConvertedPlaylist(cfg Config, outputDir, srcPlaylist string, originalLines []string) error {
+	outPath := filepath.Join(outputDir, filepath.Base(srcPlaylist))
 
 	if cfg.DryRun {
 		previewPlaylist(outPath, originalLines)
 		return nil
 	}
 
-	if err := os.MkdirAll(musicDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return err
 	}
 
