@@ -53,7 +53,7 @@ git clone <repository-url>
 cd sync_music
 
 # ビルド
-go build -o music-sync .
+go build -o m3u-sync .
 ```
 
 ## 使用方法
@@ -62,13 +62,13 @@ go build -o music-sync .
 
 ```bash
 # ドライラン（実際の変更は行わない）
-./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/UNTITLED" -dryrun
+./m3u-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/UNTITLED" -dryrun
 
 # 実際の同期実行（rsync使用）
-./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/UNTITLED"
+./m3u-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/UNTITLED"
 
 # rcloneを使用した同期
-./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/UNTITLED" -sync rclone
+./m3u-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/UNTITLED" -sync rclone
 ```
 
 ### コマンドラインオプション
@@ -84,19 +84,19 @@ go build -o music-sync .
 
 ```bash
 # 特定のプレイリストのみ同期（rsync）
-./music-sync -playlist "~/Music/Playlists/favorites.m3u8" -usbRoot "/Volumes/MyUSB"
+./m3u-sync -playlist "~/Music/Playlists/favorites.m3u8" -usbRoot "/Volumes/MyUSB"
 
 # 複数のプレイリストを一括同期（rsync）
-./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB"
+./m3u-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB"
 
 # rcloneを使用した同期
-./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB" -sync rclone
+./m3u-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB" -sync rclone
 
 # ドライランで事前確認
-./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB" -dryrun
+./m3u-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB" -dryrun
 
 # rclone + ドライラン
-./music-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB" -sync rclone -dryrun
+./m3u-sync -playlist "~/Music/Playlists/*.m3u8" -usbRoot "/Volumes/MyUSB" -sync rclone -dryrun
 ```
 
 ## 動作の詳細
@@ -217,7 +217,7 @@ src stat error /path/to/file.mp3: no such file or directory
 
 1. **ドライランモードの使用**
    ```bash
-   ./music-sync -playlist "*.m3u8" -usbRoot "/Volumes/USB" -dryrun
+   ./m3u-sync -playlist "*.m3u8" -usbRoot "/Volumes/USB" -dryrun
    ```
 
 2. **ログ出力の確認**
